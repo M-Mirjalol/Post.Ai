@@ -1,4 +1,3 @@
-// src/pages/PostGenerator.jsx
 import { useState } from 'react'
 import { generatePost } from '../lib/gemini'
 import { usePosts } from '../hooks/usePosts'
@@ -10,9 +9,11 @@ const BUSINESS_TYPES = [
   'Tibbiyot / Klinika', 'Usta / Xizmat ko\'rsatish', 'Boshqa'
 ]
 
+const PRO_TELEGRAM = '@mirjalol_mirqobilov'
+
 export default function PostGenerator() {
   const { user } = useAuth()
-  const { savePost } = usePosts(user?.uid)
+  const { savePost, isPro, monthlyCount, FREE_LIMIT } = usePosts(user?.uid)
 
   const [form, setForm] = useState({
     businessType: '', productDesc: '',
@@ -22,13 +23,17 @@ export default function PostGenerator() {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [showProModal, setShowProModal] = useState(false)
 
   function set(key, val) { setForm(f => ({ ...f, [key]: val })); setSaved(false) }
+
+  const limitReached = !isPro && monthlyCount >= FREE_LIMIT
 
   async function handleGenerate() {
     if (!form.businessType || !form.productDesc.trim()) {
       setError('Biznes turi va mahsulot tavsifini to\'ldiring'); return
     }
+    if (limitReached) { setShowProModal(true); return }
     setError(''); setLoading(true); setResult(''); setSaved(false)
     try {
       const text = await generatePost(form)
@@ -41,8 +46,12 @@ export default function PostGenerator() {
 
   async function handleSave() {
     if (!result) return
-    await savePost({ type: 'post', content: result, ...form })
-    setSaved(true)
+    try {
+      await savePost({ type: 'post', content: result, ...form })
+      setSaved(true)
+    } catch (e) {
+      if (e.message === 'LIMIT_REACHED') setShowProModal(true)
+    }
   }
 
   async function handleCopy() {
@@ -51,13 +60,66 @@ export default function PostGenerator() {
 
   return (
     <div className="fade-in">
+      {showProModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+        }}>
+          <div className="card fade-in" style={{ maxWidth: 400, width: '100%', border: '1px solid rgba(124,92,252,0.4)', textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
+            <h2 style={{ fontSize: 22, marginBottom: 8 }}>Pro rejimga o'ting</h2>
+            <p style={{ color: 'var(--text2)', fontSize: 14, marginBottom: 20, lineHeight: 1.7 }}>
+              Bepul limitingiz tugadi ({FREE_LIMIT} ta post).<br />
+              Cheksiz post yaratish uchun Pro rejimga o'ting.
+            </p>
+            <div style={{ background: 'var(--bg3)', borderRadius: 10, padding: '14px 20px', marginBottom: 20 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent2)' }}>
+                $5 <span style={{ fontSize: 14, color: 'var(--text2)', fontWeight: 400 }}>/oy</span>
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4 }}>Cheksiz post • Haftalik reja • Hashtaglar</div>
+            </div>
+            
+            <a   href={`https://t.me/${PRO_TELEGRAM.replace('@', '')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 15, textDecoration: 'none', marginBottom: 10, display: 'flex' }}
+            >
+              Telegram orqali to'lash
+            </a>
+            <button
+              className="btn btn-ghost"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={() => setShowProModal(false)}
+            >
+              Yopish
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 6 }}>Post Yaratish</h1>
-        <p style={{ color: 'var(--text2)', fontSize: 14 }}>Mahsulotingiz haqida yozing — AI tayyor post yozib beradi</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 6 }}>Post Yaratish</h1>
+            <p style={{ color: 'var(--text2)', fontSize: 14 }}>Mahsulotingiz haqida yozing — AI tayyor post yozib beradi</p>
+          </div>
+          <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', textAlign: 'center', flexShrink: 0 }}>
+            {isPro ? (
+              <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 500 }}>✦ Pro</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 700, color: limitReached ? 'var(--red)' : 'var(--text)' }}>
+                  {monthlyCount}/{FREE_LIMIT}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text2)' }}>bepul post</div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-        {/* Left — form */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }} className="post-grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="card">
             <div style={{ marginBottom: 14 }}>
@@ -67,19 +129,15 @@ export default function PostGenerator() {
                 {BUSINESS_TYPES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
-
             <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 13, color: 'var(--text2)', display: 'block', marginBottom: 6 }}>
-                Mahsulot / xizmat tavsifi
-              </label>
+              <label style={{ fontSize: 13, color: 'var(--text2)', display: 'block', marginBottom: 6 }}>Mahsulot / xizmat tavsifi</label>
               <textarea
-                placeholder="Masalan: Yangi kelgan yozgi ko'ylaklar, narxi 150 000 so'm, o'lchamlari S-XXL, ranglari: oq, ko'k, yashil"
+                placeholder="Masalan: Yangi kelgan yozgi ko'ylaklar, narxi 150 000 so'm, o'lchamlari S-XXL"
                 value={form.productDesc} onChange={e => set('productDesc', e.target.value)}
                 style={{ minHeight: 110 }}
               />
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }} className="form-grid">
               <div>
                 <label style={{ fontSize: 12, color: 'var(--text2)', display: 'block', marginBottom: 5 }}>Til</label>
                 <select value={form.language} onChange={e => set('language', e.target.value)}>
@@ -109,34 +167,26 @@ export default function PostGenerator() {
           </div>
 
           {error && (
-            <div style={{
-              background: 'var(--red-bg)', border: '1px solid rgba(239,68,68,0.2)',
-              borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--red)'
-            }}>{error}</div>
+            <div style={{ background: 'var(--red-bg)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--red)' }}>
+              {error}
+            </div>
           )}
 
           <button
             className="btn btn-primary" onClick={handleGenerate} disabled={loading}
             style={{ justifyContent: 'center', padding: '13px', fontSize: 15 }}
           >
-            {loading ? (
-              <><span className="spinner" /> Post yaratilmoqda...</>
-            ) : (
-              '✦  Post yaratish'
-            )}
+            {loading ? <><span className="spinner" /> Post yaratilmoqda...</> : limitReached ? '🔒 Limit tugadi — Pro ga o\'ting' : '✦  Post yaratish'}
           </button>
         </div>
 
-        {/* Right — result */}
         <div>
           {result ? (
             <div className="card fade-in" style={{ border: '1px solid rgba(124,92,252,0.25)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <span style={{ fontSize: 13, color: 'var(--text2)', fontWeight: 500 }}>Tayyor post</span>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={handleCopy}>
-                    📋 Nusxa
-                  </button>
+                  <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={handleCopy}>📋 Nusxa</button>
                   <button
                     className="btn btn-ghost"
                     style={{ padding: '6px 12px', fontSize: 12, color: saved ? 'var(--green)' : undefined }}
@@ -146,33 +196,16 @@ export default function PostGenerator() {
                   </button>
                 </div>
               </div>
-              <div style={{
-                whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.8,
-                color: 'var(--text)', maxHeight: 500, overflowY: 'auto'
-              }}>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.8, color: 'var(--text)', maxHeight: 500, overflowY: 'auto' }}>
                 {result}
               </div>
             </div>
           ) : (
-            <div className="card" style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', minHeight: 300, gap: 12,
-              border: '1px dashed var(--border2)'
-            }}>
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 300, gap: 12, border: '1px dashed var(--border2)' }}>
               {loading ? (
-                <>
-                  <div style={{ position: 'relative' }}>
-                    <div className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }} />
-                  </div>
-                  <p style={{ color: 'var(--text2)', fontSize: 14 }}>AI post yozmoqda...</p>
-                </>
+                <><div className="spinner" style={{ width: 36, height: 36, borderWidth: 3 }} /><p style={{ color: 'var(--text2)', fontSize: 14 }}>AI post yozmoqda...</p></>
               ) : (
-                <>
-                  <span style={{ fontSize: 36, opacity: 0.3 }}>✦</span>
-                  <p style={{ color: 'var(--text3)', fontSize: 13, textAlign: 'center' }}>
-                    Ma'lumotlarni to'ldirib<br />«Post yaratish» tugmasini bosing
-                  </p>
-                </>
+                <><span style={{ fontSize: 36, opacity: 0.3 }}>✦</span><p style={{ color: 'var(--text3)', fontSize: 13, textAlign: 'center' }}>Ma'lumotlarni to'ldirib<br />«Post yaratish» tugmasini bosing</p></>
               )}
             </div>
           )}
