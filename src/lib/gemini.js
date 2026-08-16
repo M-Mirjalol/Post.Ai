@@ -12,7 +12,7 @@ async function callAI(prompt) {
       'X-Title': 'PostAI'
     },
     body: JSON.stringify({
-      model: 'openrouter/auto',
+      model: 'nvidia/nemotron-3-super-120b-a12b:free',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 5000,
       temperature: 0.85
